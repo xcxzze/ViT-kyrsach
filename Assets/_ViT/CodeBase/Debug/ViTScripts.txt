@@ -1,0 +1,330 @@
+Exported: 17.01.2026 15:10:23
+
+using System.Collections;
+using UnityEngine;
+
+namespace _ViT.CodeBase
+{
+    public class GameEventsHandler : MonoBehaviour
+    {
+        [Header("Pirate Ships Event")]
+        [SerializeField] private GameObject pirateShipPrefab;
+        [SerializeField] private int pirateShipsCount = 3;
+    
+        public void OnSeaDetected()
+        {
+            UnityEngine.Debug.Log($"<color=cyan>═══ OnSeaDetected() ВЫЗВАН! ═══</color>");
+            UnityEngine.Debug.Log($"Префаб: {(pirateShipPrefab != null ? pirateShipPrefab.name : "НЕ НАЗНАЧЕН!")}");
+            UnityEngine.Debug.Log($"Количество: {pirateShipsCount}");
+        
+            if (pirateShipPrefab == null)
+            {
+                UnityEngine.Debug.LogError("ПРЕФАБ НЕ НАЗНАЧЕН! Создаю тестовые кубы...");
+                SpawnTestCubes();
+                return;
+            }
+        
+            StartCoroutine(SpawnShips());
+        }
+    
+        void SpawnTestCubes()
+        {
+            for (int i = 0; i < pirateShipsCount; i++)
+            {
+                GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Vector3 pos = Camera.main.transform.position + new Vector3(i * 3f, 2, 10f);
+                cube.transform.position = pos;
+                cube.transform.localScale = new Vector3(2, 1, 3);
+                cube.name = $"TestShip_{i}";
+                cube.GetComponent<Renderer>().material.color = new Color(0.6f, 0.3f, 0f);
+            
+                UnityEngine.Debug.Log($"<color=yellow>✓ Test cube created at {pos}</color>");
+            }
+        }
+    
+        IEnumerator SpawnShips()
+        {
+            for (int i = 0; i < pirateShipsCount; i++)
+            {
+                Vector3 pos = Camera.main.transform.position + new Vector3(i * 5f, 2, 10f);
+                GameObject ship = Instantiate(pirateShipPrefab, pos, Quaternion.identity);
+                ship.name = $"PirateShip_{i}";
+            
+                UnityEngine.Debug.Log($"<color=lime>✓ Ship spawned: {ship.name} at {pos}</color>");
+            
+                yield return new WaitForSeconds(0.3f);
+            }
+        
+            UnityEngine.Debug.Log($"<color=lime>✓✓✓ ВСЕ {pirateShipsCount} КОРАБЛЕЙ СОЗДАНЫ! ✓✓✓</color>");
+        }
+    }
+}
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.Events;
+using UnityEngine.Networking;
+
+namespace _ViT.CodeBase
+{
+    public class LocalViTSystem : MonoBehaviour
+    {
+        [Header("Local Server Settings")]
+        [SerializeField] private string serverUrl = "http://localhost:8000";
+    
+        [Header("Detection Settings")]
+        [SerializeField] private Camera gameCamera;
+        [SerializeField] private float detectionInterval = 3f;
+    
+        private float confidenceThreshold = 0.05f; // ЖЁСТКО 1% - ловим ВСЁ
+    
+        [Header("Event Rules")]
+        [SerializeField] private List<EventRule> eventRules = new List<EventRule>();
+    
+        private bool isAnalyzing = false;
+        private RenderTexture renderTexture;
+    
+        [System.Serializable]
+        public class EventRule
+        {
+            public string eventName;
+            public List<string> requiredLabels = new List<string>();
+            [Range(0f, 1f)]
+            public float minConfidence = 0.15f;
+            public float cooldown = 5f;
+            public UnityEvent onEventTriggered;
+        
+            [HideInInspector] public float lastTriggerTime = -999f;
+        }
+    
+        [System.Serializable]
+        private class Prediction
+        {
+            public string label;
+            public float score;
+        }
+    
+        [System.Serializable]
+        private class PredictionWrapper
+        {
+            public Prediction[] predictions;
+        }
+    
+        void Start()
+        {
+            if (gameCamera == null) gameCamera = Camera.main;
+            renderTexture = new RenderTexture(224, 224, 24);
+        
+            UnityEngine.Debug.Log("LocalViTSystem запущен!");
+            UnityEngine.Debug.Log($"Сервер: {serverUrl}");
+            UnityEngine.Debug.Log($"Камера: {(gameCamera != null ? gameCamera.name : "NULL")}");
+        
+            if (eventRules.Count == 0)
+            {
+                eventRules.Add(new EventRule
+                {
+                    eventName = "Spawn Pirate Ships",
+                    requiredLabels = new List<string> { "sea", "ocean", "water", "shore", "lake", "sand", "coast", "beach" },
+                    minConfidence = 0.15f,
+                    cooldown = 5f
+                });
+                UnityEngine.Debug.Log("Создано правило: Spawn Pirate Ships");
+            }
+        
+            StartCoroutine(CheckServer());
+        }
+    
+        IEnumerator CheckServer()
+        {
+            UnityEngine.Debug.Log("Проверка сервера...");
+            UnityWebRequest request = UnityWebRequest.Get($"{serverUrl}/health");
+            yield return request.SendWebRequest();
+        
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                UnityEngine.Debug.Log("<color=green>✓ Сервер работает!</color>");
+                StartCoroutine(PeriodicDetection());
+            }
+            else
+            {
+                UnityEngine.Debug.LogError($"<color=red>✗ Сервер недоступен: {request.error}</color>");
+            }
+        }
+    
+        IEnumerator PeriodicDetection()
+        {
+            yield return new WaitForSeconds(2f);
+            while (true)
+            {
+                if (!isAnalyzing)
+                {
+                    yield return StartCoroutine(CaptureAndAnalyze());
+                }
+                yield return new WaitForSeconds(detectionInterval);
+            }
+        }
+    
+        IEnumerator CaptureAndAnalyze()
+        {
+            isAnalyzing = true;
+        
+            UnityEngine.Debug.Log("→ Захват скриншота...");
+            Texture2D screenshot = CaptureScreenshot();
+            byte[] imageBytes = screenshot.EncodeToJPG(85);
+            UnityEngine.Debug.Log($"→ Отправка на сервер ({imageBytes.Length / 1024}KB)...");
+        
+            List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
+            formData.Add(new MultipartFormFileSection("file", imageBytes, "screenshot.jpg", "image/jpeg"));
+        
+            UnityWebRequest request = UnityWebRequest.Post($"{serverUrl}/predict", formData);
+            yield return request.SendWebRequest();
+        
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                UnityEngine.Debug.Log("→ Ответ получен, обрабатываю...");
+                ProcessPredictions(request.downloadHandler.text);
+            }
+            else
+            {
+                UnityEngine.Debug.LogError($"Ошибка: {request.error}");
+            }
+        
+            Destroy(screenshot);
+            request.Dispose();
+            isAnalyzing = false;
+        }
+    
+        Texture2D CaptureScreenshot()
+        {
+            RenderTexture currentRT = RenderTexture.active;
+            gameCamera.targetTexture = renderTexture;
+            gameCamera.Render();
+        
+            RenderTexture.active = renderTexture;
+            Texture2D screenshot = new Texture2D(224, 224, TextureFormat.RGB24, false);
+            screenshot.ReadPixels(new Rect(0, 0, 224, 224), 0, 0);
+            screenshot.Apply();
+        
+            gameCamera.targetTexture = null;
+            RenderTexture.active = currentRT;
+        
+            return screenshot;
+        }
+    
+        void ProcessPredictions(string jsonResponse)
+        {
+            try
+            {
+                string wrappedJson = "{\"predictions\":" + jsonResponse + "}";
+                PredictionWrapper wrapper = JsonUtility.FromJson<PredictionWrapper>(wrappedJson);
+            
+                if (wrapper.predictions == null)
+                {
+                    UnityEngine.Debug.LogWarning("Предсказания не получены!");
+                    return;
+                }
+            
+                UnityEngine.Debug.Log($"→ Получено {wrapper.predictions.Length} предсказаний");
+            
+                // Показываем топ-5
+                var top5 = wrapper.predictions.OrderByDescending(p => p.score).Take(5).ToList();
+                foreach (var p in top5)
+                {
+                    UnityEngine.Debug.Log($"  {p.label}: {p.score:P1}");
+                }
+            
+                var confidentPredictions = wrapper.predictions
+                    .Where(p => p.score >= confidenceThreshold)
+                    .OrderByDescending(p => p.score)
+                    .ToList();
+            
+                UnityEngine.Debug.Log($"→ Проверяю теги (порог {confidenceThreshold:P1})...");
+                UnityEngine.Debug.Log($"  Прошло фильтр: {confidentPredictions.Count} предсказаний");
+                CheckEventRules(confidentPredictions);
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError($"Parse error: {e.Message}");
+            }
+        }
+    
+        void CheckEventRules(List<Prediction> predictions)
+        {
+            float currentTime = Time.time;
+        
+            UnityEngine.Debug.Log($"CheckEventRules: получено {predictions.Count} предсказаний для проверки");
+        
+            foreach (var rule in eventRules)
+            {
+                UnityEngine.Debug.Log($"  Правило: {rule.eventName}");
+                UnityEngine.Debug.Log($"    Cooldown: {currentTime - rule.lastTriggerTime:F1}s / {rule.cooldown}s");
+            
+                if (currentTime - rule.lastTriggerTime < rule.cooldown)
+                {
+                    UnityEngine.Debug.Log($"    <color=yellow>ПРОПУСКАЕМ - cooldown активен</color>");
+                    continue;
+                }
+            
+                UnityEngine.Debug.Log($"    Проверяю {predictions.Count} предсказаний...");
+            
+                foreach (var prediction in predictions)
+                {
+                    UnityEngine.Debug.Log($"      Предсказание: '{prediction.label}' = {prediction.score:P1}");
+                    UnityEngine.Debug.Log($"      Порог правила: {rule.minConfidence:P1}");
+                
+                    if (prediction.score < rule.minConfidence)
+                    {
+                        UnityEngine.Debug.Log($"      <color=red>НЕ ПРОШЛО ПОРОГ</color>");
+                        continue;
+                    }
+                
+                    UnityEngine.Debug.Log($"      <color=green>ПРОШЛО ПОРОГ! Ищу совпадения...</color>");
+                
+                    string predLabel = prediction.label.ToLower();
+                    string[] labelParts = predLabel.Split(new char[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                
+                    UnityEngine.Debug.Log($"      Части метки: [{string.Join(", ", labelParts)}]");
+                    UnityEngine.Debug.Log($"      Ищу теги: [{string.Join(", ", rule.requiredLabels)}]");
+                
+                    foreach (var requiredLabel in rule.requiredLabels)
+                    {
+                        string reqLower = requiredLabel.ToLower();
+                        bool matched = labelParts.Any(part => part.Contains(reqLower) || reqLower.Contains(part));
+                    
+                        if (!matched) matched = predLabel.Contains(reqLower);
+                    
+                        UnityEngine.Debug.Log($"        Тег '{reqLower}': {(matched ? "<color=lime>НАЙДЕН!</color>" : "не найден")}");
+                    
+                        if (matched)
+                        {
+                            UnityEngine.Debug.Log($"════════════════════════════════════════");
+                            UnityEngine.Debug.Log($"🎯 <color=lime>ТЕГ НАЙДЕН!</color>");
+                            UnityEngine.Debug.Log($"Метка ИИ: '{prediction.label}'");
+                            UnityEngine.Debug.Log($"Уверенность: {prediction.score:P1} ({prediction.score:F3})");
+                            UnityEngine.Debug.Log($"Совпал с тегом: '{requiredLabel}'");
+                            UnityEngine.Debug.Log($"Событие: {rule.eventName}");
+                            UnityEngine.Debug.Log($"Подписчиков: {(rule.onEventTriggered != null ? rule.onEventTriggered.GetPersistentEventCount() : 0)}");
+                            UnityEngine.Debug.Log($"Вызываю событие...");
+                            UnityEngine.Debug.Log($"════════════════════════════════════════");
+                        
+                            rule.onEventTriggered?.Invoke();
+                            rule.lastTriggerTime = currentTime;
+                            return;
+                        }
+                    }
+                }
+            }
+        
+            UnityEngine.Debug.Log("<color=yellow>НИ ОДИН ТЕГ НЕ СОВПАЛ!</color>");
+        }
+    
+        void OnDestroy()
+        {
+            if (renderTexture != null) renderTexture.Release();
+        }
+    }
+}
+
