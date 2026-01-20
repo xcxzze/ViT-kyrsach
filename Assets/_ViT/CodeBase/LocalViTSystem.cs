@@ -5,10 +5,15 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System;
+using System.IO;
 
 public class LocalViTSystem : MonoBehaviour
 {
     [SerializeField] private List<EventRule> eventRules = new();
+    
+    [SerializeField] private bool saveScreenshotsToFile = true;
+    [SerializeField] private string screenshotFolder = "Screenshots";
+    
     private RenderTexture renderTexture;
     private Camera gameCamera;
 
@@ -91,6 +96,12 @@ public class LocalViTSystem : MonoBehaviour
         
         Debug.Log("→ Захват скриншота...");
         Texture2D screenshot = CaptureScreenshot();
+        
+        if (saveScreenshotsToFile)
+        {
+            SaveScreenshotToFile(screenshot);
+        }
+        
         byte[] imageBytes = screenshot.EncodeToJPG(85);
         Debug.Log($"→ Отправка на сервер ({imageBytes.Length / 1024}KB)...");
         
@@ -231,6 +242,25 @@ public class LocalViTSystem : MonoBehaviour
         }
         
         Debug.Log("<color=yellow>НИ ОДИН ТЕГ НЕ СОВПАЛ!</color>");
+    }
+    
+    void SaveScreenshotToFile(Texture2D texture)
+    {
+        string folderPath = Path.Combine(Application.dataPath, "..", screenshotFolder);
+    
+        if (!Directory.Exists(folderPath))
+        {
+            Directory.CreateDirectory(folderPath);
+        }
+    
+        string timestamp = System.DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+        string filename = $"Screenshot_{timestamp}.jpg";
+        string fullPath = Path.Combine(folderPath, filename);
+    
+        byte[] bytes = texture.EncodeToJPG(85);
+        File.WriteAllBytes(fullPath, bytes);
+    
+        Debug.Log($"<color=cyan>📷 Скриншот сохранен: {fullPath}</color>");
     }
     
     void OnDestroy()

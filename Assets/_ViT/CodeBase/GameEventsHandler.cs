@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace _ViT.CodeBase
@@ -8,6 +9,12 @@ namespace _ViT.CodeBase
         [Header("Pirate Ships Event")]
         [SerializeField] private GameObject pirateShipPrefab;
         [SerializeField] private int pirateShipsCount = 3;
+        [SerializeField] private List<Transform> pirateShipPositions;
+        
+        [Header("Werewolf Event")]
+        [SerializeField] private GameObject werewolfPrefab;
+        [SerializeField] private int werewolvesCount = 3;
+        [SerializeField] private List<Transform> werewolfPositions;
     
         public void OnSeaDetected()
         {
@@ -23,6 +30,22 @@ namespace _ViT.CodeBase
             }
         
             StartCoroutine(SpawnShips());
+        }
+        
+        public void OnNightForestDetected()
+        {
+            UnityEngine.Debug.Log($"<color=magenta>═══ OnNightForestDetected() ВЫЗВАН! ═══</color>");
+            UnityEngine.Debug.Log($"Префаб: {(werewolfPrefab != null ? werewolfPrefab.name : "НЕ НАЗНАЧЕН!")}");
+            UnityEngine.Debug.Log($"Количество: {werewolvesCount}");
+    
+            if (werewolfPrefab == null)
+            {
+                UnityEngine.Debug.LogError("ПРЕФАБ НЕ НАЗНАЧЕН! Создаю тестовые капсулы...");
+                SpawnTestCubes();
+                return;
+            }
+    
+            StartCoroutine(SpawnWerewolves());
         }
     
         void SpawnTestCubes()
@@ -44,7 +67,7 @@ namespace _ViT.CodeBase
         {
             for (int i = 0; i < pirateShipsCount; i++)
             {
-                Vector3 pos = Camera.main.transform.position + new Vector3(i * 5f, 2, 10f);
+                Vector3 pos = pirateShipPositions[i].position;
                 GameObject ship = Instantiate(pirateShipPrefab, pos, Quaternion.identity);
                 ship.name = $"PirateShip_{i}";
             
@@ -54,6 +77,22 @@ namespace _ViT.CodeBase
             }
         
             UnityEngine.Debug.Log($"<color=lime>✓✓✓ ВСЕ {pirateShipsCount} КОРАБЛЕЙ СОЗДАНЫ! ✓✓✓</color>");
+        }
+        
+        IEnumerator SpawnWerewolves()
+        {
+            for (int i = 0; i < werewolvesCount; i++)
+            {
+                Vector3 pos = werewolfPositions[i].position;
+                GameObject werewolf = Instantiate(werewolfPrefab, pos, Quaternion.identity);
+                werewolf.name = $"Werewolf_{i}";
+        
+                UnityEngine.Debug.Log($"<color=lime>✓ Werewolf spawned: {werewolf.name} at {pos}</color>");
+        
+                yield return new WaitForSeconds(0.5f);
+            }
+    
+            UnityEngine.Debug.Log($"<color=lime>✓✓✓ ВСЕ {werewolvesCount} ОБОРОТНЕЙ СОЗДАНЫ! ✓✓✓</color>");
         }
     }
 }
