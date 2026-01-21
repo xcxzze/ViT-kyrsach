@@ -15,7 +15,7 @@ public class LocalViTSystem : MonoBehaviour
     [SerializeField] private string screenshotFolder = "Screenshots";
     
     private RenderTexture renderTexture;
-    private Camera gameCamera;
+    [SerializeField]private Camera gameCamera;
 
     private string serverUrl = "http://localhost:8000";
 

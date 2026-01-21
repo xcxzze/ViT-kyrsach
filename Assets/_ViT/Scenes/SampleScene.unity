@@ -1420,7 +1420,7 @@ MonoBehaviour:
     requiredLabels:
     - alp
     - valley
-    - volcano
+    - vale
     minConfidence: 0.3
     spawnOnce: 1
     onEventTriggered:
@@ -1428,7 +1428,7 @@ MonoBehaviour:
         m_Calls:
         - m_Target: {fileID: 1790409829}
           m_TargetAssemblyTypeName: _ViT.CodeBase.GameEventsHandler, Assembly-CSharp
-          m_MethodName: OnNightForestDetected
+          m_MethodName: OnValleytDetected
           m_Mode: 1
           m_Arguments:
             m_ObjectArgument: {fileID: 0}
@@ -1439,7 +1439,7 @@ MonoBehaviour:
             m_BoolArgument: 0
           m_CallState: 2
     hasTriggered: 0
-  saveScreenshotsToFile: 0
+  saveScreenshotsToFile: 1
   screenshotFolder: Screenshots
 --- !u!1 &1925650177
 GameObject:

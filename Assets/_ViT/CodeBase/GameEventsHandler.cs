@@ -32,7 +32,7 @@ namespace _ViT.CodeBase
             StartCoroutine(SpawnShips());
         }
         
-        public void OnNightForestDetected()
+        public void OnValleytDetected()
         {
             UnityEngine.Debug.Log($"<color=magenta>═══ OnNightForestDetected() ВЫЗВАН! ═══</color>");
             UnityEngine.Debug.Log($"Префаб: {(werewolfPrefab != null ? werewolfPrefab.name : "НЕ НАЗНАЧЕН!")}");
